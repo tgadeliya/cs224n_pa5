@@ -55,7 +55,10 @@ Don't change above here; write your code below
 """
 
 if args.variant == 'vanilla':
-    pass # TODO [part c]: Make some model here
+    model: nn.Module = model.GPT(mconf)     
+    print("Vanilla model parameters: ", end="\n")
+    for model_param in model.state_dict():
+        print(model_param, "\t", model.state_dict()[model_param].sizer())
 elif args.variant == 'synthesizer':
     pass # TODO [part g]: Make some other model here
 
@@ -112,7 +115,39 @@ elif args.function == 'finetune':
     #         warmup_tokens=512*20
     #         final_tokens=200*len(pretrain_dataset)*block_size
     #         num_workers=4
-    raise NotImplementedError
+    
+    if args.reading_params_path:
+        print("Loading pretrained model from {}...", end="")
+        model.load_state_dict(torch.load(args.reading_params_path))
+        print("Done.")
+
+    trainer_params_dict = {
+            "max_epochs": 10 if args.reading_params_path else 75,
+            "batch_size": 256,
+            "learning_rate": 6e-4,
+            "lr_decay": True,
+            "warmup_tokens": 512*20,
+            "final_tokens": 200*len(pretrain_dataset)*block_size,
+            "num_workers": 4,
+    }
+    finetune_text = open(args.finetune_corpus_path, "r").read()
+    finetune_dataset = dataset.NameDataset(
+        pretrain_dataset=pretrain_dataset,
+        data = finetune_text
+    )
+
+    tconf = trainer.TrainConfig(**trainer_params_dict)
+    trainer = trainer.Trainer(
+        model=model,
+        train_dataset=finetune_dataset,
+        test_dataset=None,
+        config=tconf
+    )
+    trainer.train()
+    print(f"Writing model to {args.writing_params_path} ...", end="")
+    torch.save(model.state_dict(), args.writing_params_path)
+    print("Done.")
+    
 elif args.function == 'evaluate':
     assert args.outputs_path is not None
     assert args.reading_params_path is not None
